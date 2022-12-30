@@ -1,17 +1,11 @@
 from flask import request, jsonify 
-import jwt
+import os
 import datetime
-from dotenv import load_dotenv
 from app.helper.account_helper import detect_account
 from app.main import deploy
 
-load_dotenv()
-
 app = deploy()[0]
-# initiate koneksi ke database menggunakan config yang sudah di prepare
 mysql = deploy()[1]
-
-
 
 # List of routes (endpoints) start by @
 @app.route('/')
@@ -39,7 +33,7 @@ def login():
             'id_account' : '',
             'status' : '',
             'message': '',
-            'token': ''
+            # 'token': ''
         }
 
         # print('I FOUND : ' + str(data))
@@ -51,10 +45,6 @@ def login():
         else:
             if password == data[3] and username == data[2]:
 
-                token = jwt.encode({
-                    'user' : username, 
-                    'exp' : 'forever'
-                }, app.config['SECRET_KEY'])
                 
                 print('I FOUND : ' + str(data))
                 print('===============================')
@@ -65,7 +55,7 @@ def login():
                 resp['id_account'] = data[0]
                 resp['status'] = 'success'
                 resp['message'] = 'Anda berhasil login'
-                resp['token'] = token
+
                 return jsonify(resp)
             else:
                 resp['status'] = 'failed'
@@ -80,23 +70,19 @@ def do_absen():
             return "Absen via the Absen Form"
     
         if request.method == 'POST':
-            id_account = request.json['id_account']
-            status = request.json['status']
-            token = request.json['token']
+            id_account = request.form['id_account'] # pake id doang, bukan id_account
+            image = request.files['image']
+
             date_now_yyyymmdd = datetime.datetime.now().strftime("%Y-%m-%d")
             time_now_hhmmss = datetime.datetime.now().strftime("%H:%M:%S")
-    
-            try:
-                jwt.decode(token, app.config['SECRET_KEY'])
-            except:
-                return jsonify({'status': 'failed', 'message': 'Token tidak valid'})
+
             
             resp = {
                 'status' : '',
                 'message': ''
             }
 
-            account_search = detect_account(id_account, token)
+            account_search = detect_account(id_account)
             if account_search != 'account_ditemukan':
                 resp['status'] = 'failed'
                 resp['message'] = account_search
@@ -109,19 +95,33 @@ def do_absen():
 
             data = cursor.fetchone()
 
-            if data is not None:
+            print('DATA : ' + str(data))
+
+            if data is None:
+
+                # check directory
+                if not os.path.exists('app/storage/new_data/' + id_account):
+                    os.makedirs('app/storage/present_image/new_data/' + id_account)
+
+                # save image
+                image.save('app/storage/present_image/new_data/' + id_account + '/' + date_now_yyyymmdd + 'clock_in.jpg')
+
+                image_path = 'app/storage/new_data/' + id_account + '/' + date_now_yyyymmdd + 'clock_in.jpg'
+
+
+                # masukin data ke tabel present dulu buat dapetin id attendance nya
+                cursor.execute("INSERT INTO present (date, clock_in, clock_out, image) VALUES (%s, %s, %s, %s)", (date_now_yyyymmdd, time_now_hhmmss, '-', image_path))
                 
-                cursor.execute("INSERT INTO present (date, clock_in, clock_out, image) VALUES (%s, %s, %s, %s)", (date_now_yyyymmdd,id_account, status))
                 last_id = cursor.lastrowid
 
-                cursor.execute("INSERT INTO detail_attendance (id_detail_attendance, date, id_account, id_attendance) VALUES (%s, %s, %s, %s)", (date_now_yyyymmdd, id_account, status))
+                # masukin data ke tabel detail_attendance dengan membawa id attendance yang baru saja didapat
+                cursor.execute("INSERT INTO detail_attendance (date, id_account, id_attendance) VALUES (%s, %s, %s)", (date_now_yyyymmdd, id_account, last_id))
 
                 resp['status'] = 'success'
                 resp['message'] = 'Anda berhasil Clock In'
             
             else:
                 cursor.execute("UPDATE present SET clock_out = %s WHERE id = %s", (time_now_hhmmss, data[0]))
-                cursor.execute("UPDATE detail_attendance SET status = %s WHERE id_detail_attendance = %s", (status, data[0]))
 
                 resp['status'] = 'success'
                 resp['message'] = 'Anda berhasil Clock Out'

@@ -127,6 +127,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+app/storage/new_data/present_image/new_data/*
+app/storage/new_data/present_image/training_data/*
 
 # Spyder project settings
 .spyderproject
