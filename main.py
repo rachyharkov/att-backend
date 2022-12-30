@@ -30,7 +30,7 @@ def login():
         cursor.close()
         
         resp = {
-            'id_account' : '',
+            'unique_account_id' : '',
             'status' : '',
             'message': '',
             # 'token': ''
@@ -52,7 +52,7 @@ def login():
                 print('ID ACCOUNT : ' + str(data[1]))
                 print('===============================')
 
-                resp['id_account'] = data[0]
+                resp['unique_account_id'] = data[0]
                 resp['status'] = 'success'
                 resp['message'] = 'Anda berhasil login'
 
@@ -70,7 +70,7 @@ def do_absen():
             return "Absen via the Absen Form"
     
         if request.method == 'POST':
-            id_account = request.form['id_account'] # pake id doang, bukan id_account
+            unique_account_id = request.form['unique_account_id'] # pake id doang, bukan unique_account_id
             image = request.files['image']
 
             date_now_yyyymmdd = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -82,7 +82,7 @@ def do_absen():
                 'message': ''
             }
 
-            account_search = detect_account(id_account)
+            account_search = detect_account(unique_account_id)
             if account_search != 'account_ditemukan':
                 resp['status'] = 'failed'
                 resp['message'] = account_search
@@ -91,7 +91,7 @@ def do_absen():
             cursor = mysql.connection.cursor()
             
             # cek apakah sudah absen hari ini
-            cursor.execute("SELECT * FROM present JOIN detail_attendance ON present.id = detail_attendance.id_attendance WHERE detail_attendance.id_account = %s AND detail_attendance.date = %s AND present.clock_in IS NOT NULL", (id_account, date_now_yyyymmdd))
+            cursor.execute("SELECT * FROM present JOIN detail_attendance ON present.id = detail_attendance.id_attendance WHERE detail_attendance.unique_account_id = %s AND detail_attendance.date = %s AND present.clock_in IS NOT NULL", (unique_account_id, date_now_yyyymmdd))
 
             data = cursor.fetchone()
 
@@ -100,22 +100,22 @@ def do_absen():
             if data is None:
 
                 # check directory
-                if not os.path.exists('app/storage/new_data/' + id_account):
-                    os.makedirs('app/storage/present_image/new_data/' + id_account)
+                if not os.path.exists('app/storage/new_data/' + unique_account_id):
+                    os.makedirs('app/storage/present_image/new_data/' + unique_account_id)
 
                 # save image
-                image.save('app/storage/present_image/new_data/' + id_account + '/' + date_now_yyyymmdd + 'clock_in.jpg')
+                image.save('app/storage/present_image/new_data/' + unique_account_id + '/' + date_now_yyyymmdd + 'clock_in.jpg')
 
-                image_path = 'app/storage/new_data/' + id_account + '/' + date_now_yyyymmdd + 'clock_in.jpg'
+                image_path = 'app/storage/new_data/' + unique_account_id + '/' + date_now_yyyymmdd + 'clock_in.jpg'
 
 
                 # masukin data ke tabel present dulu buat dapetin id attendance nya
-                cursor.execute("INSERT INTO present (date, clock_in, clock_out, image) VALUES (%s, %s, %s, %s)", (date_now_yyyymmdd, time_now_hhmmss, '-', image_path))
+                cursor.execute("INSERT INTO present (date, clock_in, clock_out, absence_image_path) VALUES (%s, %s, %s, %s)", (date_now_yyyymmdd, time_now_hhmmss, '-', image_path))
                 
                 last_id = cursor.lastrowid
 
                 # masukin data ke tabel detail_attendance dengan membawa id attendance yang baru saja didapat
-                cursor.execute("INSERT INTO detail_attendance (date, id_account, id_attendance) VALUES (%s, %s, %s)", (date_now_yyyymmdd, id_account, last_id))
+                cursor.execute("INSERT INTO detail_attendance (date, unique_account_id, id_attendance) VALUES (%s, %s, %s)", (date_now_yyyymmdd, unique_account_id, last_id))
 
                 resp['status'] = 'success'
                 resp['message'] = 'Anda berhasil Clock In'
