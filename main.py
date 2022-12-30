@@ -1,22 +1,19 @@
-from flask import Flask, request, jsonify
-from flask_mysqldb import MySQL 
-import os
+from flask import request, jsonify 
 import jwt
 import datetime
 from dotenv import load_dotenv
+from app.helper.account_helper import detect_account
+from app.main import deploy
 
 load_dotenv()
 
-app = Flask(__name__)
+app = deploy()[0]
+# initiate koneksi ke database menggunakan config yang sudah di prepare
+mysql = deploy()[1]
 
-app.config['MYSQL_HOST'] = os.getenv('MYSQL_HOST')
-app.config['MYSQL_USER'] = os.getenv('MYSQL_USER')
-app.config['MYSQL_PASSWORD'] = os.getenv('MYSQL_PASSWORD')
-app.config['MYSQL_DB'] = os.getenv('MYSQL_DATABASE')
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
- 
-mysql = MySQL(app)
 
+
+# List of routes (endpoints) start by @
 @app.route('/')
 def index():
     return 'mantaapp'
@@ -74,3 +71,64 @@ def login():
                 resp['status'] = 'failed'
                 resp['message'] = 'Anda terdaftar, tapi data login salah, silahkan coba lagi'
                 return jsonify(resp)
+
+
+@app.route('/do_absen', methods = ['POST', 'GET'])
+def do_absen():
+    
+        if request.method == 'GET':
+            return "Absen via the Absen Form"
+    
+        if request.method == 'POST':
+            id_account = request.json['id_account']
+            status = request.json['status']
+            token = request.json['token']
+            date_now_yyyymmdd = datetime.datetime.now().strftime("%Y-%m-%d")
+            time_now_hhmmss = datetime.datetime.now().strftime("%H:%M:%S")
+    
+            try:
+                jwt.decode(token, app.config['SECRET_KEY'])
+            except:
+                return jsonify({'status': 'failed', 'message': 'Token tidak valid'})
+            
+            resp = {
+                'status' : '',
+                'message': ''
+            }
+
+            account_search = detect_account(id_account, token)
+            if account_search != 'account_ditemukan':
+                resp['status'] = 'failed'
+                resp['message'] = account_search
+                return jsonify(resp)
+            
+            cursor = mysql.connection.cursor()
+            
+            # cek apakah sudah absen hari ini
+            cursor.execute("SELECT * FROM present JOIN detail_attendance ON present.id = detail_attendance.id_attendance WHERE detail_attendance.id_account = %s AND detail_attendance.date = %s AND present.clock_in IS NOT NULL", (id_account, date_now_yyyymmdd))
+
+            data = cursor.fetchone()
+
+            if data is not None:
+                
+                cursor.execute("INSERT INTO present (date, clock_in, clock_out, image) VALUES (%s, %s, %s, %s)", (date_now_yyyymmdd,id_account, status))
+                last_id = cursor.lastrowid
+
+                cursor.execute("INSERT INTO detail_attendance (id_detail_attendance, date, id_account, id_attendance) VALUES (%s, %s, %s, %s)", (date_now_yyyymmdd, id_account, status))
+
+                resp['status'] = 'success'
+                resp['message'] = 'Anda berhasil Clock In'
+            
+            else:
+                cursor.execute("UPDATE present SET clock_out = %s WHERE id = %s", (time_now_hhmmss, data[0]))
+                cursor.execute("UPDATE detail_attendance SET status = %s WHERE id_detail_attendance = %s", (status, data[0]))
+
+                resp['status'] = 'success'
+                resp['message'] = 'Anda berhasil Clock Out'
+
+            mysql.connection.commit()
+            cursor.close()
+
+
+            return jsonify(resp)
+            
