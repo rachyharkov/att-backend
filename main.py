@@ -12,57 +12,6 @@ mysql = deploy()[1]
 def index():
     return 'mantaapp'
 
-@app.route('/login', methods = ['POST', 'GET'])
-def login():
-
-    if request.method == 'GET':
-        return "Login via the login Form"
-
-    if request.method == 'POST':
-        username = request.json['usernamenya']
-        password = request.json['passwordnya']
-
-        cursor = mysql.connection.cursor()
-        cursor.execute("SELECT * FROM account WHERE username = %s", (username,)) # <-- this is the problem, I think it's because of the comma
-        data = cursor.fetchone()
-
-        mysql.connection.commit()
-        cursor.close()
-        
-        resp = {
-            'unique_account_id' : '',
-            'status' : '',
-            'message': '',
-            # 'token': ''
-        }
-
-        # print('I FOUND : ' + str(data))
-
-        if data is None:
-            resp['status'] = 'failed'
-            resp['message'] = 'Anda tidak terdaftar'
-            return resp
-        else:
-            if password == data[3] and username == data[2]:
-
-                
-                print('I FOUND : ' + str(data))
-                print('===============================')
-                print('USERNAME : ' + str(data[2]))
-                print('ID ACCOUNT : ' + str(data[1]))
-                print('===============================')
-
-                resp['unique_account_id'] = data[0]
-                resp['status'] = 'success'
-                resp['message'] = 'Anda berhasil login'
-
-                return jsonify(resp)
-            else:
-                resp['status'] = 'failed'
-                resp['message'] = 'Anda terdaftar, tapi data login salah, silahkan coba lagi'
-                return jsonify(resp)
-
-
 @app.route('/do_absen', methods = ['POST', 'GET'])
 def do_absen():
     
